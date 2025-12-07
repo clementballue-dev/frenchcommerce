@@ -1,4 +1,5 @@
-index.htlm<!DOCTYPE html>
+index.htlm
+<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
@@ -109,3 +110,6 @@ index.htlm<!DOCTYPE html>
 
 </body>
 </html>
+git add index.html
+git commit -m "Ajout index.html pour GitHub Pages"
+git push origin main
