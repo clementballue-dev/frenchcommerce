@@ -315,4 +315,18 @@
 
 </body>
 </html>
+<p id="waitingMsg">Choisissez une région et un commerce</p>
+if(selectedRegion && selectedCommerce){
+  renderResults(...)
+} else {
+  resultsArea.innerHTML = '';
+}
+function selectRegion(btn, region){
+  selectedRegion = region;
+  updateUI();
+}
+function selectCommerce(btn, commerce){
+  selectedCommerce = commerce;
+  updateUI();
+}
 
