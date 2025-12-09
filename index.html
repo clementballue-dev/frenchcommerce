@@ -1,336 +1,161 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Mini-jeu — Play</title>
+<meta charset="UTF-8">
+<title>Mini Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-  :root{
-    --bg:#3b82f6;      /* bleu de fond */
-    --ui:#0b74ff;      /* couleur boutons */
-    --ui-contrast:#fff;
-    --card:#ffffff22;
-  }
-
-  html,body{
-    height:100%;
-    margin:0;
-    font-family: Inter, system-ui, Arial, sans-serif;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-    background:var(--bg);
-  }
-
-  /* canvas centré et plein écran */
-  #gameWrap{
-    position:relative;
-    width:100%;
-    height:100vh;
-    display:block;
-    overflow:hidden;
-  }
-
-  canvas{
-    display:block;
-    width:100%;
-    height:100%;
-    background:linear-gradient(#3b82f6,#2b6fd6);
-  }
-
-  /* bouton jouer en bas à droite */
-  .playBtn{
-    position:fixed;
-    right:20px;
-    bottom:20px;
-    z-index:40;
-    background:var(--ui);
-    color:var(--ui-contrast);
-    border:0;
-    padding:14px 18px;
-    border-radius:12px;
-    box-shadow:0 6px 18px rgba(11,116,255,0.28);
-    font-weight:600;
-    cursor:pointer;
-    display:inline-flex;
-    gap:10px;
-    align-items:center;
-    user-select:none;
-    transition:transform .12s ease, box-shadow .12s ease;
-  }
-  .playBtn:active{ transform:translateY(2px); box-shadow:0 3px 10px rgba(11,116,255,0.22); }
-
-  .playBtn svg{ width:18px; height:18px; fill:currentColor; }
-
-  /* petite UI en haut à gauche affichant état */
-  .info{
-    position:fixed;
-    left:18px;
-    top:18px;
-    z-index:40;
-    color:white;
-    background:var(--card);
-    padding:8px 12px;
-    border-radius:10px;
-    backdrop-filter: blur(6px);
-    font-size:14px;
-    box-shadow:0 6px 18px rgba(0,0,0,0.12);
-  }
-
-  /* mobile tweaks */
-  @media (max-width:480px){
-    .playBtn{ right:12px; bottom:12px; padding:12px 14px; border-radius:10px; }
-  }
+html,body{
+  margin:0;
+  padding:0;
+  height:100%;
+  background:#2f80ff;
+  font-family: Arial, sans-serif;
+}
+canvas{
+  display:block;
+}
+#playBtn{
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  padding:15px 22px;
+  font-size:18px;
+  background:#111;
+  color:white;
+  border:none;
+  border-radius:12px;
+  cursor:pointer;
+}
+#info{
+  position:fixed;
+  top:15px;
+  left:15px;
+  color:white;
+  font-size:18px;
+}
 </style>
 </head>
+
 <body>
+<canvas id="game"></canvas>
 
-<div id="gameWrap">
-  <canvas id="gameCanvas"></canvas>
-
-  <div class="info" id="info">État : <strong id="state">En attente</strong></div>
-
-  <button class="playBtn" id="playBtn" aria-live="polite" aria-pressed="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-    <span id="playLabel">Jouer</span>
-  </button>
-</div>
+<div id="info">Vie : <span id="life">1</span></div>
+<button id="playBtn">JOUER</button>
 
 <script>
-/*
-  Mini-jeu simple :
-  - personnage = cercle centré
-  - bouton Jouer lance la boucle de jeu
-  - flèches gauche/droite pour déplacer
-  - espace ou clique sur le canvas pour faire sauter
-  - overlay / UI minimale
-*/
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const lifeText = document.getElementById("life");
 
-/* Setup canvas */
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d', { alpha: false });
-
-function resize() {
-  // utiliser taille physique pour éviter flou sur écrans haute-DPI
-  const ratio = window.devicePixelRatio || 1;
-  const w = Math.floor(canvas.clientWidth * ratio);
-  const h = Math.floor(canvas.clientHeight * ratio);
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
-  }
+function resize(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
-window.addEventListener('resize', resize);
+window.addEventListener("resize", resize);
 resize();
 
-/* État du jeu */
 let running = false;
-let lastTime = 0;
+let life = 1;
 
-/* Player */
 const player = {
-  x: 0, y: 0,        // position en pixels (physique canvas coords)
-  vx: 0, vy: 0,
-  radius: 28,
-  color: '#FFD166',
-  grounded: false
+  x: canvas.width/2,
+  y: canvas.height/2,
+  r: 25,
+  vx:0,
+  speed:6
 };
 
-/* Monde / gravité */
-const GRAVITY = 1800;      // px/s^2
-const MOVE_SPEED = 320;    // px/s
-const JUMP_SPEED = 680;    // px/s
+const enemy = {
+  x:100,
+  y:100,
+  r:30,
+  vx:4
+};
 
-/* Input */
-const keys = { left:false, right:false, up:false };
-
-/* Simple ground: a platform at 3/4 height */
-function groundY() {
-  return canvas.height * 0.75;
-}
-
-/* draw loop */
-function drawScene(dt, t) {
-  // clear (canvas already has background color via CSS background)
-  // but we must draw the sky gradient onto physical canvas
-  const w = canvas.width, h = canvas.height;
-  // sky gradient
-  const g = ctx.createLinearGradient(0,0,0,h);
-  g.addColorStop(0, '#3b82f6');
-  g.addColorStop(1, '#2b6fd6');
-  ctx.fillStyle = g;
-  ctx.fillRect(0,0,w,h);
-
-  // ground (a band)
-  const gy = groundY();
-  ctx.fillStyle = '#0ea5e9';
-  ctx.fillRect(0, gy, w, h - gy);
-
-  // draw player (convert logical coords to canvas coords if using ratio)
-  ctx.save();
-  // player shadow
-  ctx.beginPath();
-  ctx.ellipse(player.x, gy + player.radius + 6, player.radius*0.9, player.radius*0.4, 0, 0, Math.PI*2);
-  ctx.fillStyle = 'rgba(0,0,0,0.12)';
-  ctx.fill();
-
-  // player body
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
-  ctx.fillStyle = player.color;
-  ctx.fill();
-
-  // eye
-  ctx.fillStyle = '#222';
-  ctx.beginPath();
-  ctx.arc(player.x + player.radius*0.18, player.y - player.radius*0.12, player.radius*0.12, 0, Math.PI*2);
-  ctx.fill();
-
-  // smile
-  ctx.beginPath();
-  ctx.strokeStyle = '#222';
-  ctx.lineWidth = 2;
-  ctx.arc(player.x, player.y+2, player.radius*0.45, 0.1*Math.PI, 0.9*Math.PI);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-/* update physics */
-function update(dt) {
-  // horizontal input
-  let ax = 0;
-  if (keys.left) ax = -1;
-  if (keys.right) ax = 1;
-
-  player.vx = ax * MOVE_SPEED;
-
-  // gravity
-  player.vy += GRAVITY * dt;
-
-  // integrate
-  player.x += player.vx * dt;
-  player.y += player.vy * dt;
-
-  // world bounds horizontally
-  const leftBound = player.radius + 10;
-  const rightBound = canvas.width - player.radius - 10;
-  if (player.x < leftBound) { player.x = leftBound; player.vx = 0; }
-  if (player.x > rightBound) { player.x = rightBound; player.vx = 0; }
-
-  // ground collision
-  const gy = groundY();
-  if (player.y + player.radius > gy) {
-    player.y = gy - player.radius;
-    player.vy = 0;
-    player.grounded = true;
-  } else {
-    player.grounded = false;
-  }
-}
-
-/* game loop */
-function loop(ts) {
-  if (!running) return;
-  if (!lastTime) lastTime = ts;
-  const dt = Math.min(0.033, (ts - lastTime) / 1000); // clamp dt
-  lastTime = ts;
-
-  update(dt);
-  drawScene(dt, ts);
-
-  requestAnimationFrame(loop);
-}
-
-/* start / stop */
-const stateLabel = document.getElementById('state');
-const playBtn = document.getElementById('playBtn');
-const playLabel = document.getElementById('playLabel');
-
-function centerPlayer() {
-  player.x = canvas.width / 2;
-  player.y = groundY() - player.radius;
-  player.vx = 0;
-  player.vy = 0;
-}
-
-function startGame() {
-  if (running) return;
+function resetGame(){
+  life = 1;
+  lifeText.textContent = life;
+  player.x = canvas.width/2;
+  player.y = canvas.height/2;
+  enemy.x = 100;
   running = true;
-  lastTime = 0;
-  centerPlayer();
-  stateLabel.textContent = 'En cours';
-  playLabel.textContent = 'Pause';
-  playBtn.setAttribute('aria-pressed','true');
+}
+
+document.getElementById("playBtn").onclick = () => {
+  resetGame(); // si quelqu’un appuie → une nouvelle partie démarre
+};
+
+const keys = {};
+window.addEventListener("keydown",e=>keys[e.key]=true);
+window.addEventListener("keyup",e=>keys[e.key]=false);
+
+function update(){
+  if(!running) return;
+
+  if(keys["ArrowLeft"]) player.x -= player.speed;
+  if(keys["ArrowRight"]) player.x += player.speed;
+  if(keys["ArrowUp"]) player.y -= player.speed;
+  if(keys["ArrowDown"]) player.y += player.speed;
+
+  enemy.x += enemy.vx;
+  if(enemy.x < enemy.r || enemy.x > canvas.width-enemy.r){
+    enemy.vx *= -1;
+  }
+
+  const dx = player.x - enemy.x;
+  const dy = player.y - enemy.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  if(dist < player.r + enemy.r){
+    life = 0;
+    lifeText.textContent = life;
+    running = false;
+    alert("GAME OVER");
+  }
+}
+
+function drawPlayer(){
+  // style Fortnite (silhouette)
+  ctx.fillStyle = "#ffcc00";
+  ctx.beginPath();
+  ctx.arc(player.x, player.y-15, 8, 0, Math.PI*2); // tête
+  ctx.fill();
+
+  ctx.strokeStyle = "#111";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(player.x, player.y-7);
+  ctx.lineTo(player.x, player.y+20); // corps
+  ctx.lineTo(player.x-10, player.y+40); // jambe
+  ctx.moveTo(player.x, player.y+20);
+  ctx.lineTo(player.x+10, player.y+40);
+  ctx.stroke();
+}
+
+function drawEnemy(){
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  ctx.arc(enemy.x, enemy.y, enemy.r, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function loop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#2f80ff";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  if(running){
+    update();
+  }
+
+  drawPlayer();
+  drawEnemy();
   requestAnimationFrame(loop);
 }
 
-function stopGame() {
-  running = false;
-  stateLabel.textContent = 'En pause';
-  playLabel.textContent = 'Jouer';
-  playBtn.setAttribute('aria-pressed','false');
-  // draw one final frame so user sees position
-  drawScene(0, performance.now());
-}
-
-/* Toggle on button */
-playBtn.addEventListener('click', ()=> {
-  if (running) stopGame(); else startGame();
-});
-
-/* Input handling */
-window.addEventListener('keydown', (e)=>{
-  if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
-  if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
-  if (e.key === ' ' || e.key === 'Spacebar') {
-    // jump
-    if (player.grounded) {
-      player.vy = -JUMP_SPEED;
-      player.grounded = false;
-    }
-    e.preventDefault();
-  }
-});
-
-window.addEventListener('keyup', (e)=>{
-  if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
-  if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
-});
-
-/* Touch + click on canvas to jump / move */
-canvas.addEventListener('click', (e)=>{
-  // click to jump if grounded
-  if (player.grounded && running) {
-    player.vy = -JUMP_SPEED;
-    player.grounded = false;
-  }
-});
-canvas.addEventListener('touchstart', (e)=>{
-  if (!running) return;
-  // simple: touch left/right half to move, tap to jump
-  const touch = e.touches[0];
-  const rect = canvas.getBoundingClientRect();
-  const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
-  if (x < canvas.width * 0.4) { keys.left = true; keys.right = false; } 
-  else if (x > canvas.width * 0.6) { keys.right = true; keys.left = false; }
-  else { if (player.grounded) { player.vy = -JUMP_SPEED; player.grounded = false; } }
-});
-canvas.addEventListener('touchend', (e)=>{
-  keys.left = false; keys.right = false;
-});
-
-/* initial draw and center player */
-centerPlayer();
-drawScene(0, 0);
-
-/* accessibility: space/enter on playBtn */
-playBtn.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    playBtn.click();
-  }
-});
+loop();
 </script>
 </body>
 </html>
