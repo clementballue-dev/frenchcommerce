@@ -4,6 +4,13 @@ git commit -m "Ajout du jeu"
 git branch -M main
 git remote add origin https://github.com/TON_PSEUDO/NOM_DU_DEPOT.git
 git push -u origin main
-
-
+git add index.html
+git commit -m "Jeu avec ennemi et vie unique"
+git push
+git add index.html
+git commit -m "Ajout pistolet et tirs"
+git push
+git add index.html
+git commit -m "Chargeur 10 balles + rechargement"
+git push
 
